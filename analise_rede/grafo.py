@@ -26,6 +26,14 @@ class Grafo:
         self.lista_adj = {}
         self.num_vertices = 0
         self.num_arestas = 0
+        
+
+    def obter_lista_adj(self):
+        """
+        Retorna o dicionário interno de adjacência.
+        """
+        return self.lista_adj
+
 
     def adicionar_vertice(self, vertice):
         """
