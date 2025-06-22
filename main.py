@@ -14,6 +14,7 @@ from analise_rede.algoritmos import (
 
 def main():
     caminho_csv = 'dados/netflix_amazon_disney_titles.csv'
+    #caminho_csv = 'TDE5 dataset/netflix_amazon_disney_titles.csv'
 
     # 1) Inicia grafos
     grafo_dir = Grafo()  # direcionado: ator -> diretor
@@ -30,10 +31,18 @@ def main():
     print("="*60)
 
     # 3) Atividade 2: componentes
-    scc = count_strongly_connected_components(grafo_dir.lista_adj)
-    cc  = count_connected_components    (grafo_und.lista_adj)
-    print(f"\nComponentes fortemente conexas: {scc}")
-    print(f"Componentes conexas:               {cc}")
+    
+    #scc = count_strongly_connected_components(grafo_dir.lista_adj)
+    #cc  = count_connected_components    (grafo_und.lista_adj)
+    #print(f"\nComponentes fortemente conexas: {scc}")
+    #print(f"Componentes conexas:               {cc}")
+
+# A função agora retorna (contagem, lista_de_tamanhos).
+# Usamos '_' para indicar que vamos ignorar o segundo valor (a lista).
+    scc_count, _ = count_strongly_connected_components(grafo_dir.lista_adj)
+    cc_count, _  = count_connected_components(grafo_und.lista_adj)
+    print(f"\nComponentes fortemente conexas: {scc_count}")
+    print(f"Componentes conexas:               {cc_count}")
 
     # 4) Escolhe exemplos: um ator e um diretor
     exemplo_ator = next(iter(grafo_und.lista_adj))

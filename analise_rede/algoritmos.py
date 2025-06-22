@@ -5,16 +5,17 @@ import random
 from collections import deque
 
 def count_strongly_connected_components(graph):
-    """Conta SCCs em grafo dirigido representado por dict[v][w]=peso."""
+    """Conta SCCs e retorna a contagem e a distribuição de seus tamanhos."""
     index = 0
     stack = []
     on_stack = set()
     indices = {}
     lowlink = {}
-    scc_count = 0
+    scc_count = 0  # Antes
+    scc_sizes = [] # Para guardar os tamanhos
 
     def strongconnect(v):
-        nonlocal index, scc_count
+        nonlocal index
         indices[v] = index
         lowlink[v] = index
         index += 1
@@ -27,36 +28,44 @@ def count_strongly_connected_components(graph):
             elif w in on_stack:
                 lowlink[v] = min(lowlink[v], indices[w])
         if lowlink[v] == indices[v]:
-            # found SCC root
+            component_size = 0
             while True:
                 w = stack.pop()
                 on_stack.remove(w)
+                component_size += 1
                 if w == v:
                     break
-            scc_count += 1
+            scc_sizes.append(component_size)
 
     for v in graph:
         if v not in indices:
             strongconnect(v)
-    return scc_count
+    # retornar uma tupla com dois valores
+    # return scc_count # Linha original para execução do main.py
+    return len(scc_sizes), scc_sizes
 
 
 def count_connected_components(graph):
-    """Conta componentes conexas em grafo não-direcionado."""
+    """Conta componentes conexas e retorna a contagem e a distribuição de seus tamanhos."""
     visited = set()
-    count = 0
+    component_sizes = []
     for v in graph:
         if v not in visited:
-            count += 1
+            component_size = 0
             stack = [v]
             visited.add(v)
+            component_size += 1
             while stack:
                 u = stack.pop()
                 for w in graph.get(u, {}):
                     if w not in visited:
                         visited.add(w)
                         stack.append(w)
-    return count
+                        component_size += 1
+            component_sizes.append(component_size)
+    #retornar uma tupla com dois valores
+    # return count # Linha original para execução do main.py
+    return len(component_sizes), component_sizes
 
 
 def prim_mst_for_vertex(graph, X):
@@ -184,33 +193,48 @@ def betweenness_centrality(graph, v):
 
 
 def closeness_centrality(graph, v):
-    """Centralidade de proximidade clássica normalizada de v em [0,1]."""
-    from collections import deque
-
+    """
+    Calcula a centralidade de proximidade normalizada de v em [0,1].
+    Esta versão é corrigida para grafos direcionados ou não-conectados.
+    """
     if v not in graph:
         raise ValueError(f"Vértice {v} não existe no grafo.")
+    
     N = len(graph)
     if N <= 1:
         return 0.0
 
-    # BFS (tratamos grafo como não-ponderado para performance)
-    dist = {u: float('inf') for u in graph}
-    dist[v] = 0
+    # BFS para encontrar todos os nós alcançáveis e suas distâncias
+    dist = {v: 0}
     queue = deque([v])
+    
     while queue:
         u = queue.popleft()
-        for w in graph[u]:
-            if dist[w] == float('inf'):
+        # Itera sobre os vizinhos para os quais u tem uma aresta de saída
+        for w in graph.get(u, {}):
+            if w not in dist:
                 dist[w] = dist[u] + 1
                 queue.append(w)
 
-    # Soma das distâncias finitas
-    total_dist = sum(d for u, d in dist.items() if u != v and d < float('inf'))
+    # 'n' é o número de nós alcançáveis a partir de v
+    n = len(dist)
+    
+    # Se o nó não alcança nenhum outro nó (n=1) ou é um grafo trivial, a centralidade é 0.
+    if n <= 1:
+        return 0.0
+
+    # Soma das distâncias finitas para os nós alcançáveis
+    total_dist = sum(dist.values())
+
     if total_dist == 0:
         return 0.0
 
-    # Fórmula normalizada
-    return (N - 1) / total_dist
+    # Normalização de Wasserman e Faust para grafos não-conectados/direcionados
+    # (n-1) / total_dist é a proximidade "bruta" na componente
+    # (n-1) / (N-1) é o fator de correção pela fração de nós alcançáveis
+    closeness = ((n - 1) / total_dist) * ((n - 1) / (N - 1))
+    
+    return closeness
 
 
 def approx_betweenness_centrality(graph, v, k=50, seed=42):
@@ -264,3 +288,22 @@ def approx_betweenness_centrality(graph, v, k=50, seed=42):
     # fator = k * (N-1)*(N-2)/2   → queremos fracasso sobre total de pares possíveis
     norm = (N - 1) * (N - 2) / 2
     return (accum * N / len(fontes)) / norm
+
+#Para a questão 3 do relatório
+def in_degree_centrality(graph, v):
+    """Calcula a centralidade de grau de entrada (in-degree) normalizada."""
+    if v not in graph:
+        return 0.0
+
+    N = len(graph)
+    if N <= 1:
+        return 0.0
+
+    in_degree = 0
+    # Itera em todos os nós para ver quem aponta para 'v'
+    for node in graph:
+        if v in graph[node]:
+            in_degree += 1
+
+    # Normaliza pelo número máximo de arestas de entrada possíveis (N-1)
+    return in_degree / (N - 1)
