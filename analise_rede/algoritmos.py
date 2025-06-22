@@ -114,15 +114,21 @@ def prim_mst_for_vertex(graph, X):
 def degree_centrality(graph, v, directed=False):
     """
     Centralidade de grau normalizada de v (0–1).
-    - directed=False -> grafo não-direcionado: out-degree
-    - directed=True  -> grafo direcionado: in-degree + out-degree
+    - directed=False -> grau(v) / (N-1)
+    - directed=True  -> (in-degree(v) + out-degree(v)) / (2*(N-1))
     """
     if v not in graph:
         raise ValueError(f"Vértice {v} não existe no grafo.")
+
     N = len(graph)
     if N <= 1:
         return 0.0
+
     grau = len(graph[v])
+    if directed:
+        grau += sum(1 for nbrs in graph.values() if v in nbrs)
+        return grau / (2 * (N - 1))
+
     return grau / (N - 1)
 
 
@@ -193,47 +199,36 @@ def betweenness_centrality(graph, v):
 
 
 def closeness_centrality(graph, v):
-    """
-    Calcula a centralidade de proximidade normalizada de v em [0,1].
-    Esta versão é corrigida para grafos direcionados ou não-conectados.
-    """
+    """Centralidade de proximidade normalizada de ``v`` em ``[0, 1]``."""
     if v not in graph:
         raise ValueError(f"Vértice {v} não existe no grafo.")
-    
+
     N = len(graph)
     if N <= 1:
         return 0.0
 
-    # BFS para encontrar todos os nós alcançáveis e suas distâncias
-    dist = {v: 0}
+    # BFS não ponderado para obter distâncias mínimas
+    dist = {u: -1 for u in graph}
+    dist[v] = 0
     queue = deque([v])
-    
+    reachable = 1
+
     while queue:
         u = queue.popleft()
-        # Itera sobre os vizinhos para os quais u tem uma aresta de saída
-        for w in graph.get(u, {}):
-            if w not in dist:
+        for w in graph[u]:
+            if dist[w] == -1:
                 dist[w] = dist[u] + 1
                 queue.append(w)
+                reachable += 1
 
-    # 'n' é o número de nós alcançáveis a partir de v
-    n = len(dist)
-    
-    # Se o nó não alcança nenhum outro nó (n=1) ou é um grafo trivial, a centralidade é 0.
-    if n <= 1:
+    total_dist = sum(d for d in dist.values() if d > 0)
+    if total_dist <= 0:
         return 0.0
 
-    # Soma das distâncias finitas para os nós alcançáveis
-    total_dist = sum(dist.values())
+    closeness = (reachable - 1) / total_dist
+    if reachable < N:
+        closeness *= (reachable - 1) / (N - 1)
 
-    if total_dist == 0:
-        return 0.0
-
-    # Normalização de Wasserman e Faust para grafos não-conectados/direcionados
-    # (n-1) / total_dist é a proximidade "bruta" na componente
-    # (n-1) / (N-1) é o fator de correção pela fração de nós alcançáveis
-    closeness = ((n - 1) / total_dist) * ((n - 1) / (N - 1))
-    
     return closeness
 
 
@@ -288,6 +283,94 @@ def approx_betweenness_centrality(graph, v, k=50, seed=42):
     # fator = k * (N-1)*(N-2)/2   → queremos fracasso sobre total de pares possíveis
     norm = (N - 1) * (N - 2) / 2
     return (accum * N / len(fontes)) / norm
+
+
+def approx_betweenness_centrality_all(graph, k=50, seed=42):
+    """Estimativa da betweenness de todos os vértices usando amostragem."""
+    nodes = list(graph.keys())
+    N = len(nodes)
+    if N < 3:
+        return {v: 0.0 for v in nodes}
+
+    random.seed(seed)
+    fontes = random.sample(nodes, min(k, N))
+    betw = {v: 0.0 for v in nodes}
+
+    undirected = all(u in graph[w] for u in graph for w in graph[u])
+
+    for s in fontes:
+        dist = {v: -1 for v in nodes}
+        sigma = {v: 0 for v in nodes}
+        P = {v: [] for v in nodes}
+        dist[s] = 0
+        sigma[s] = 1
+        queue = deque([s])
+        order = []
+
+        while queue:
+            v = queue.popleft()
+            order.append(v)
+            for w in graph[v]:
+                if dist[w] < 0:
+                    dist[w] = dist[v] + 1
+                    queue.append(w)
+                if dist[w] == dist[v] + 1:
+                    sigma[w] += sigma[v]
+                    P[w].append(v)
+
+        delta = {v: 0.0 for v in nodes}
+        for w in reversed(order):
+            for u in P[w]:
+                delta[u] += (sigma[u] / sigma[w]) * (1 + delta[w])
+            if w != s:
+                betw[w] += delta[w]
+
+    norm = (N - 1) * (N - 2)
+    if undirected:
+        norm /= 2.0
+
+    scale = (N / len(fontes)) / norm
+    for v in betw:
+        betw[v] *= scale
+    return betw
+
+
+def _plot_bar_chart(pares, titulo):
+    """Função auxiliar para plotar gráficos de barras horizontais."""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("Matplotlib não está disponível. Gráfico não será exibido.")
+        return
+
+    nomes = [p[0] for p in pares]
+    valores = [p[1] for p in pares]
+    plt.figure(figsize=(10, 6))
+    plt.barh(nomes[::-1], valores[::-1])
+    plt.xlabel("Centralidade")
+    plt.title(titulo)
+    plt.tight_layout()
+    plt.show()
+
+#questao 4 do relatorio
+def top_betweenness_directors(graph, diretores, top_n=10, sample=50, seed=42, plot=True):
+    """Retorna e opcionalmente plota os diretores mais centrais por betweenness."""
+    bc_all = approx_betweenness_centrality_all(graph, k=sample, seed=seed)
+    filtrado = {d: bc_all.get(d, 0.0) for d in diretores}
+    ordenado = sorted(filtrado.items(), key=lambda x: x[1], reverse=True)[:top_n]
+    if plot:
+        _plot_bar_chart(ordenado, "Top Betweenness Centrality (Diretores)")
+    return ordenado
+
+#questao 5 do relatorio
+def top_closeness_directors(graph, diretores, top_n=10, plot=True):
+    """Retorna e opcionalmente plota os diretores mais centrais por closeness."""
+    cc = {d: closeness_centrality(graph, d) for d in diretores if d in graph}
+    ordenado = sorted(cc.items(), key=lambda x: x[1], reverse=True)[:top_n]
+    if plot:
+        _plot_bar_chart(ordenado, "Top Closeness Centrality (Diretores)")
+    return ordenado
+
 
 #Para a questão 3 do relatório
 def in_degree_centrality(graph, v):
