@@ -1,21 +1,10 @@
-# arquivo: analise_rede/processador_dados.py
-
 import pandas as pd
-from .grafo import Grafo # Usamos o '.' para indicar importação dentro do mesmo pacote
+from .grafo import Grafo 
 
 def limpar_string(nome: str) -> str:
-    """Padroniza os nomes: maiúsculas e sem espaços extras."""
     return nome.strip().upper()
 
 def processar_arquivo(caminho_arquivo: str, grafo_direcionado: Grafo, grafo_nao_direcionado: Grafo):
-    """
-    Lê o arquivo CSV e popula ambos os grafos.
-
-    Args:
-        caminho_arquivo (str): O caminho para o arquivo CSV.
-        grafo_direcionado (Grafo): Instância do grafo direcionado (Ator -> Diretor) a ser populada.
-        grafo_nao_direcionado (Grafo): Instância do grafo não-direcionado (Ator <-> Ator) a ser populada.
-    """
     print("Iniciando o processamento do arquivo CSV...")
 
     # Carrega o CSV usando pandas.

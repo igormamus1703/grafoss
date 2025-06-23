@@ -390,3 +390,227 @@ def in_degree_centrality(graph, v):
 
     # Normaliza pelo número máximo de arestas de entrada possíveis (N-1)
     return in_degree / (N - 1)
+
+def calcular_centralidades_de_grau_em_lote(grafo):
+    """
+    Calcula a Centralidade de Grau para TODOS os vértices de um grafo de uma só vez.
+
+    Esta função é uma otimização para evitar chamar a função de centralidade
+    individual milhares de vezes.
+
+    Args:
+        grafo (Grafo): O objeto de grafo a ser analisado.
+
+    Returns:
+        dict: Um dicionário mapeando cada vértice à sua centralidade de grau normalizada.
+    """
+    centralidades = {}
+    num_vertices = grafo.obter_numero_vertices()
+
+    if num_vertices <= 1:
+        return {}
+
+    denominador = float(num_vertices - 1)
+
+    # Itera sobre todos os vértices para calcular a centralidade de cada um
+    for vertice in grafo.obter_vertices():
+        # O grau é o número de vizinhos
+        grau = len(grafo.obter_vizinhos(vertice))
+        centralidades[vertice] = grau / denominador
+        
+    return centralidades
+
+def calcular_centralidades_de_intermediacao_aprox(grafo, k=100, semente=42):
+    """
+    Calcula uma aproximação da Centralidade de Intermediação para todos os nós.
+
+    O algoritmo seleciona uma amostra de 'k' vértices e calcula os caminhos
+    mais curtos a partir deles, extrapolando o resultado para toda a rede.
+    Isso torna o cálculo viável para grafos grandes.
+
+    Args:
+        grafo (Grafo): O objeto de grafo a ser analisado.
+        k (int): O número de nós a serem usados como amostra. Um 'k' maior
+                 aumenta a precisão, mas também o tempo de execução.
+        semente (int): Semente para o gerador de números aleatórios para
+                     garantir que a amostra seja a mesma em diferentes execuções.
+
+    Returns:
+        dict: Um dicionário mapeando cada vértice à sua centralidade de 
+              intermediação aproximada e normalizada.
+    """
+    random.seed(semente)
+    vertices = grafo.obter_vertices()
+    num_vertices = len(vertices)
+    
+    # Seleciona uma amostra de k vértices para usar como fontes
+    if k > num_vertices:
+        fontes = vertices
+    else:
+        fontes = random.sample(vertices, k)
+    
+    intermediacao = {v: 0.0 for v in vertices}
+
+    for s in fontes:
+        # Etapa 1: BFS para encontrar caminhos mais curtos
+        pilha = []
+        predecessores = {v: [] for v in vertices}
+        sigma = {v: 0.0 for v in vertices}
+        sigma[s] = 1.0
+        distancia = {v: -1 for v in vertices}
+        distancia[s] = 0
+        fila = deque([s])
+
+        while fila:
+            v = fila.popleft()
+            pilha.append(v)
+
+            for w in grafo.obter_vizinhos(v):
+                if distancia[w] < 0:
+                    fila.append(w)
+                    distancia[w] = distancia[v] + 1
+                
+                if distancia[w] == distancia[v] + 1:
+                    sigma[w] += sigma[v]
+                    predecessores[w].append(v)
+        
+        # Etapa 2: Acumular dependências
+        delta = {v: 0.0 for v in vertices}
+        while pilha:
+            w = pilha.pop()
+            for v_pred in predecessores[w]:
+                # O fator de divisão sigma[w] não pode ser zero
+                if sigma[w] != 0:
+                    fator = (sigma[v_pred] / sigma[w])
+                    delta[v_pred] += fator * (1 + delta[w])
+            
+            if w != s:
+                intermediacao[w] += delta[w]
+
+    # Normalização final
+    if num_vertices > 2:
+        # Fator de escala pela amostragem
+        fator_escala = num_vertices / k
+        # Normalizador para grafos não-direcionados
+        normalizador = (num_vertices - 1) * (num_vertices - 2) / 2.0
+        for v in intermediacao:
+            intermediacao[v] = (intermediacao[v] * fator_escala) / normalizador
+    
+    return intermediacao
+
+def calcular_centralidades_de_proximidade_em_lote(grafo):
+    """
+    Calcula a Centralidade de Proximidade para todos os vértices de um grafo.
+
+    A função lida corretamente com grafos não-conectados, calculando a 
+    centralidade dentro da componente de cada nó e normalizando pelo tamanho
+    total da rede (Fórmula de Wasserman e Faust).
+
+    Args:
+        grafo (Grafo): O objeto de grafo a ser analisado.
+
+    Returns:
+        dict: Um dicionário mapeando cada vértice à sua centralidade de proximidade.
+    """
+    centralidades = {}
+    todos_os_vertices = grafo.obter_vertices()
+    num_vertices_total = len(todos_os_vertices)
+
+    if num_vertices_total <= 1:
+        return {}
+    
+    print("Iniciando cálculo exato de Centralidade de Proximidade...")
+    
+    # Loop principal que executa a BFS para cada nó
+    for i, vertice in enumerate(todos_os_vertices):
+        # --- Indicador de Progresso ---
+        # Imprime o progresso na mesma linha para não poluir o console
+        progresso = (i + 1) / num_vertices_total * 100
+        print(f"\rCalculando... {progresso:.2f}% concluído ({i+1}/{num_vertices_total})", end="")
+
+        # Etapa 1: BFS para encontrar distâncias a partir do 'vertice' atual
+        distancia = {vertice: 0}
+        fila = deque([vertice])
+        soma_distancias = 0
+        
+        while fila:
+            u = fila.popleft()
+            soma_distancias += distancia[u]
+            
+            for v_vizinho in grafo.obter_vizinhos(u):
+                if v_vizinho not in distancia:
+                    distancia[v_vizinho] = distancia[u] + 1
+                    fila.append(v_vizinho)
+        
+        # Etapa 2: Cálculo da centralidade para o 'vertice'
+        num_alcalcaveis = len(distancia)
+        
+        if soma_distancias == 0 or num_alcalcaveis <= 1:
+            centralidades[vertice] = 0.0
+            continue
+
+        # Fórmula de Wasserman e Faust para grafos não-conectados/direcionados
+        fator_alcance = (num_alcalcaveis - 1) / (num_vertices_total - 1)
+        proximidade_bruta = (num_alcalcaveis - 1) / soma_distancias
+        
+        centralidades[vertice] = proximidade_bruta * fator_alcance
+
+    print("\nCálculo de Proximidade finalizado.")
+    return centralidades
+
+def calcular_centralidades_de_proximidade_aprox(grafo, k=200, semente=42):
+    """
+    Calcula uma aproximação da Centralidade de Proximidade para todos os nós.
+
+    Seleciona uma amostra de 'k' nós pivô e calcula a soma das distâncias de
+    todos os outros nós para essa amostra, tornando o cálculo viável.
+
+    Args:
+        grafo (Grafo): O objeto de grafo a ser analisado.
+        k (int): O número de nós pivô a serem usados na amostragem.
+        semente (int): Semente para reprodutibilidade.
+
+    Returns:
+        dict: Um dicionário mapeando cada vértice à sua centralidade de 
+              proximidade aproximada e normalizada.
+    """
+    random.seed(semente)
+    vertices = grafo.obter_vertices()
+    num_vertices_total = len(vertices)
+
+    if num_vertices_total <= 1:
+        return {}
+
+    # Seleciona k nós pivô aleatoriamente
+    pivos = random.sample(vertices, min(k, num_vertices_total))
+    
+    soma_distancias = {v: 0.0 for v in vertices}
+    
+    # Executa uma BFS a partir de cada pivô
+    for pivo in pivos:
+        distancia = {pivo: 0}
+        fila = deque([pivo])
+        
+        while fila:
+            u = fila.popleft()
+            for v_vizinho in grafo.obter_vizinhos(u):
+                if v_vizinho not in distancia:
+                    distancia[v_vizinho] = distancia[u] + 1
+                    fila.append(v_vizinho)
+        
+        # Adiciona a distância encontrada à soma de cada nó
+        for v in vertices:
+            if v in distancia:
+                soma_distancias[v] += distancia[v]
+
+    # Calcula a centralidade aproximada para cada vértice
+    centralidades = {}
+    for v in vertices:
+        if soma_distancias[v] == 0:
+            centralidades[v] = 0.0
+        else:
+            # A centralidade é o inverso da distância média para os pivôs
+            centralidade_aprox = k / soma_distancias[v]
+            centralidades[v] = centralidade_aprox
+
+    return centralidades
